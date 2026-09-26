@@ -16,6 +16,50 @@ local pairs, ipairs = pairs, ipairs
 local abs, ceil, floor, min, mod = math.abs, math.ceil, math.floor, math.min, mod
 local tinsert, tremove = table.insert, table.remove
 
+if not CreateTexturePool or not CreateFramePool then
+	local function NewPool(acquire, release)
+		local pool = { inactive = {}, active = {}, Acquire = acquire, Release = release }
+		function pool:ReleaseAll() for obj in pairs(self.active) do self:Release(obj) end end
+		return pool
+	end
+
+	function CreateTexturePool(parent, layer, subLayer, template, resetter)
+		return NewPool(
+			function(self)
+				local tex = tremove(self.inactive)
+				if not tex then
+					tex = parent:CreateTexture(nil, layer, template, subLayer)
+				end
+				self.active[tex] = true
+				return tex
+			end,
+			function(self, tex)
+				self.active[tex] = nil
+				if resetter then resetter(self, tex) else tex:Hide(); tex:ClearAllPoints() end
+				tinsert(self.inactive, tex)
+			end
+		)
+	end
+
+	function CreateFramePool(frameType, parent, template, resetter)
+		return NewPool(
+			function(self)
+				local f = tremove(self.inactive)
+				if not f then
+					f = CreateFrame(frameType, nil, parent, template)
+				end
+				self.active[f] = true
+				return f
+			end,
+			function(self, f)
+				self.active[f] = nil
+				if resetter then resetter(self, f) else f:Hide(); f:ClearAllPoints() end
+				tinsert(self.inactive, f)
+			end
+		)
+	end
+end
+
 local function AnimateTexCoords(texture, textureWidth, textureHeight, frameWidth, frameHeight, numFrames, elapsed, throttle)
   if not texture.frame then
     texture.frame = 1
@@ -984,7 +1028,9 @@ local function InitProcGlow(f)
 end
 
 local function SetupProcGlow(f, options)
-  f.key = "_ProcGlow" .. options.key -- for resetter
+  -- [SIRUS] f.key is set once in ProcGlow_Start with the full key; overwriting it here with
+  -- only options.key would make the resetter look up a nonexistent "_ProcGlow"..key slot and
+  -- leak the frame reference on the button forever
 
   f:SetScript("OnHide", function(self)
     StopFlipbook(self)
@@ -1038,6 +1084,7 @@ function lib.ProcGlow_Start(r, options)
       InitProcGlow(f)
     end
     r[key] = f
+    f.key = key -- [SIRUS] store the full key: the resetter needs it to clear r[key]
   end
 
   f:SetParent(r)

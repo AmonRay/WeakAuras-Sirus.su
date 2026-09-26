@@ -160,23 +160,24 @@ do
     end
   end
 
-  function C_Timer.After(duration, callback)
-    ValidateArguments(duration, callback, "After")
-
-    local state = GetContainerState(callback) or {
-      callback = callback,
-      cancelled = false,
-      fields = {},
-    }
-    AddDelayedCall({
-      state = state,
-      callbackView = CreateContainerView(state),
-      iterations = 1,
-      delay = math.max(0.01, duration),
-    })
+  local function StripSelfArgument(...)
+    local first = ...
+    if first == C_Timer then
+      return select(2, ...)
+    end
+    return ...
   end
 
-  local function CreateTicker(duration, callback, iterations)
+  local CreateTicker
+
+  function C_Timer.After(...)
+    local duration, callback = StripSelfArgument(...)
+    ValidateArguments(duration, callback, "After")
+
+    return CreateTicker(duration, callback, 1)
+  end
+
+  function CreateTicker(duration, callback, iterations)
     local state = GetContainerState(callback) or {
       callback = callback,
       cancelled = false,
@@ -194,18 +195,21 @@ do
     return CreateContainerView(state)
   end
 
-  function C_Timer.NewTicker(duration, callback, iterations)
+  function C_Timer.NewTicker(...)
+    local duration, callback, iterations = StripSelfArgument(...)
     ValidateArguments(duration, callback, "NewTicker")
     ValidateIterations(iterations)
     return CreateTicker(duration, callback, iterations)
   end
 
-  function C_Timer.NewTimer(duration, callback)
+  function C_Timer.NewTimer(...)
+    local duration, callback = StripSelfArgument(...)
     ValidateArguments(duration, callback, "NewTimer")
     return CreateTicker(duration, callback, 1)
   end
 
-  function C_Timer.CancelTimer(ticker, silent)
+  function C_Timer.CancelTimer(...)
+    local ticker, silent = StripSelfArgument(...)
     if ticker and ticker.Cancel then
       ticker:Cancel()
     elseif not silent then
